@@ -73,19 +73,25 @@ public class UnifiClient {
 
             String siteId = getSiteId(controllerHostname, httpClient, site);
 
+            System.out.println(new Date() + " retrieved site data for " + site);
+
             Pair uapCredentials = getUAPCredentials(controllerHostname, httpClient, siteId);
-            if (uapCredentials == null) {
-                System.out.println("SSH Authentication must be enabled");
-                System.exit(1);
-            }
+
+            System.out.println(new Date() + " retrieved credentials for " + site);
 
             checkWifiNetworkConfig(controllerHostname, httpClient, siteId);
 
             populateUAPData(controllerHostname, httpClient, siteId);
 
+            System.out.println(new Date() + " general configuration examination complete");
             System.out.println();
 
-            uapData.column(IP).forEach((mac, ip) -> {
+            Map<String, Object> uapDataIPs = uapData.column(IP);
+            if (uapDataIPs == null) {
+                System.out.println("could not determine uap ip addresses");
+                System.exit(1);
+            }
+            uapDataIPs.forEach((mac, ip) -> {
                         UAPClient client = new UAPClient((String) ip, uapCredentials.a, uapCredentials.b, mac);
 
                         (new Thread(client)).start();
@@ -101,16 +107,17 @@ public class UnifiClient {
         HttpGet get = new HttpGet("https://" + controllerHostname + ":8443/api/s/" + siteId + "/rest/wlanconf");
 
         try (CloseableHttpResponse response = httpclient.execute(get)) {
-            if (response.getStatusLine().getStatusCode() != 200) {
+            if (response == null || response.getStatusLine() == null || response.getStatusLine().getStatusCode() != 200 || response.getEntity() == null) {
                 throw new RuntimeException("can't get site data for " + siteId);
             }
 
             String reString = EntityUtils.toString(response.getEntity());
             Map<String, Object> responseMap = mapper.readValue(reString, new TypeReference<Map<String, Object>>() {});
 
-            ((Collection<Map<String, Object>>) responseMap.get(DATA))
+            Collection<Map<String, Object>> parameterMaps = (Collection<Map<String, Object>>) responseMap.get(DATA);
+            parameterMaps
                     .stream()
-                    .filter(m -> (Boolean)m.get("enabled"))
+                    .filter(m -> Boolean.TRUE.equals(m.get("enabled")))
                     .forEach(m -> {
                         String name = (String)m.get(NAME);
 
@@ -122,7 +129,9 @@ public class UnifiClient {
     }
 
     private static void check_dtim(String tech, String band_desc, String name, Map<String, Object> m) {
-        if ((Integer) m.get("dtim_" + tech) < 3) {
+        Integer dtimValue = (Integer)m.get("dtim_" + tech);
+
+        if (dtimValue == null || dtimValue < 3) {
             System.out.println("Consider increasing " + band_desc + " DTIM Period to 3 or greater on Wireless Network " + name);
         }
     }
@@ -144,7 +153,7 @@ public class UnifiClient {
         HttpGet get = new HttpGet("https://" + controllerHostname + ":8443/api/s/" + siteId + "/stat/device");
 
         try (CloseableHttpResponse response = httpclient.execute(get)) {
-            if (response.getStatusLine().getStatusCode() != 200) {
+            if (response == null || response.getStatusLine() == null || response.getStatusLine().getStatusCode() != 200 || response.getEntity() == null) {
                 throw new RuntimeException("can't get site data for " + siteId);
             }
 
@@ -249,7 +258,7 @@ public class UnifiClient {
         HttpGet get = new HttpGet("https://" + controllerHostname + ":8443/api/s/" + siteId + "/get/setting");
 
         try (CloseableHttpResponse response = httpclient.execute(get)) {
-            if (response.getStatusLine().getStatusCode() != 200) {
+            if (response == null || response.getStatusLine() == null || response.getStatusLine().getStatusCode() != 200 || response.getEntity() == null) {
                 throw new RuntimeException("can't get site data for " + siteId);
             }
 
@@ -270,7 +279,7 @@ public class UnifiClient {
                     })
                     .filter(p -> !isEmpty(p.a) && !isEmpty(p.b))
                     .findFirst()
-                    .orElse(null);
+                    .orElseThrow(() -> new RuntimeException("SSH Authentication must be enabled for " + siteId));
         }
     }
 
@@ -279,7 +288,7 @@ public class UnifiClient {
         HttpGet get = new HttpGet("https://" + controllerHostname + ":8443/api/self/sites");
 
         try (CloseableHttpResponse response = httpclient.execute(get)) {
-            if (response.getStatusLine().getStatusCode() != 200) {
+            if (response == null || response.getStatusLine() == null || response.getStatusLine().getStatusCode() != 200 || response.getEntity() == null) {
                 throw new RuntimeException("can't get sites");
             }
 
@@ -291,7 +300,7 @@ public class UnifiClient {
                     .filter(m -> site.equals(m.get(DESC)) || site.equals(m.get(NAME)))
                     .map(m -> (String)m.get(NAME))
                     .findFirst()
-                    .orElse(null);
+                    .orElseThrow(() -> new RuntimeException("could not retrieve data for site " + site));
         }
     }
 
@@ -309,9 +318,11 @@ public class UnifiClient {
         post.setHeader("Content-type", "application/json");
 
         try (CloseableHttpResponse response = httpclient.execute(post)) {
-            if (response.getStatusLine().getStatusCode() != 200) {
+            if (response == null || response.getStatusLine() == null || response.getStatusLine().getStatusCode() != 200) {
                 throw new RuntimeException("could not log in");
             }
         }
+
+        System.out.println(new Date() + " logged into controller");
     }
 }

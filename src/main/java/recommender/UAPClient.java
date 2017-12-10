@@ -49,7 +49,7 @@ public class UAPClient implements Runnable {
                 try (Session session = ssh.startSession()) {
                     session.allocateDefaultPTY();
                     final Session.Command cmd = session.exec("stainfo -a");
-                    System.out.println("connected to UAP " + apAndName(apMac));
+                    System.out.println(new Date() + " connected to UAP " + apAndName(apMac));
                     try (BufferedReader reader = new BufferedReader(new InputStreamReader(cmd.getInputStream()))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
@@ -94,24 +94,24 @@ public class UAPClient implements Runnable {
 
             clientDataMap.put(clientMac, clientData);
 
-            System.out.println(now + "; new client: " + clientMac + " at ap: " + apAndName(apMac));
+            System.out.println(now + " new client: " + clientMac + " at ap: " + apAndName(apMac));
         } else {
             // did it roam?
             if (clientData.last5GHz != is5GHz ||
                     !apMac.equals(clientData.lastAPMac)) {
 
                 // it roamed
-                System.out.println(now + "; " + clientMac + " roamed from " + apAndName(clientData.lastAPMac) + " to " + apAndName(apMac));
+                System.out.println(now + " " + clientMac + " roamed from " + apAndName(clientData.lastAPMac) + " to " + apAndName(apMac));
 
                 // if it roams at a low rssi, that means ap tx power too high
                 // if it roams at a high rssi, that means ap tx power too low
 
                 if (avg(clientData.lastRssi, clientData.lastLastRssi) < 16) {
-                    System.out.println(now + "; " + clientMac + " roamed from " + apAndName(clientData.lastAPMac) + " when rssi was " + clientData.lastRssi +
+                    System.out.println(now + " " + clientMac + " roamed from " + apAndName(clientData.lastAPMac) + " when rssi was " + clientData.lastRssi +
                             " and lastRssi was " + clientData.lastLastRssi +
                             "; tx power too HIGH on " + apAndName(clientData.lastAPMac));
                 } else if (avg(clientData.lastRssi, clientData.lastLastRssi) > 25) {
-                    System.out.println(now + "; " + clientMac + " roamed from " + apAndName(clientData.lastAPMac) + " when rssi was " + clientData.lastRssi +
+                    System.out.println(now + " " + clientMac + " roamed from " + apAndName(clientData.lastAPMac) + " when rssi was " + clientData.lastRssi +
                             " and lastRssi was " + clientData.lastLastRssi +
                             "; tx power too LOW on " + apAndName(clientData.lastAPMac));
                 }
