@@ -13,7 +13,12 @@ import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.*;
 import org.apache.http.util.EntityUtils;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -68,35 +73,53 @@ public class UnifiClient {
 
     public static void doit(String controllerHostname, String username, String pw, String site) {
 
-        try (CloseableHttpClient httpClient = HttpClients.custom().setDefaultCookieStore(cookieStore).setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE).build()) {
-            loginToController(controllerHostname, username, pw, httpClient);
+        try {
+            SSLContext sc = SSLContext.getInstance("SSL");
+            sc.init(null, new TrustManager[]{new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+                }
 
-            String siteId = getSiteId(controllerHostname, httpClient, site);
+                @Override
+                public void checkServerTrusted(X509Certificate[] x509Certificates, String s) throws CertificateException {
+                }
 
-            System.out.println(new Date() + " retrieved site data for " + site);
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            }}, new java.security.SecureRandom());
 
-            Pair uapCredentials = getUAPCredentials(controllerHostname, httpClient, siteId);
+            try (CloseableHttpClient httpClient = HttpClients.custom().setSSLContext(sc).setDefaultCookieStore(cookieStore).setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE).build()) {
+                loginToController(controllerHostname, username, pw, httpClient);
 
-            System.out.println(new Date() + " retrieved credentials for " + site);
+                String siteId = getSiteId(controllerHostname, httpClient, site);
 
-            checkWifiNetworkConfig(controllerHostname, httpClient, siteId);
+                System.out.println(new Date() + " retrieved site data for " + site);
 
-            populateUAPData(controllerHostname, httpClient, siteId);
+                Pair uapCredentials = getUAPCredentials(controllerHostname, httpClient, siteId);
 
-            System.out.println(new Date() + " general configuration examination complete");
-            System.out.println();
+                System.out.println(new Date() + " retrieved credentials for " + site);
 
-            Map<String, Object> uapDataIPs = uapData.column(IP);
-            if (uapDataIPs == null) {
-                System.out.println("could not determine uap ip addresses");
-                System.exit(1);
+                checkWifiNetworkConfig(controllerHostname, httpClient, siteId);
+
+                populateUAPData(controllerHostname, httpClient, siteId);
+
+                System.out.println(new Date() + " general configuration examination complete");
+                System.out.println();
+
+                Map<String, Object> uapDataIPs = uapData.column(IP);
+                if (uapDataIPs == null) {
+                    System.out.println("could not determine uap ip addresses");
+                    System.exit(1);
+                }
+                uapDataIPs.forEach((mac, ip) -> {
+                            UAPClient client = new UAPClient((String) ip, uapCredentials.a, uapCredentials.b, mac);
+
+                            (new Thread(client)).start();
+                        }
+                );
             }
-            uapDataIPs.forEach((mac, ip) -> {
-                        UAPClient client = new UAPClient((String) ip, uapCredentials.a, uapCredentials.b, mac);
-
-                        (new Thread(client)).start();
-                    }
-            );
         } catch (Exception e) {
             System.out.print("got exception: " + e);
         }
